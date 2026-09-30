@@ -1,0 +1,123 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ── the CLI, built from the fripack fork (MIT) ───────────────────────────────
+  cli:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14          # Apple Silicon
+            target: aarch64-apple-darwin
+            asset: fripack-macos-arm64
+          - runner: macos-15-intel    # Intel
+            target: x86_64-apple-darwin
+            asset: fripack-macos-x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build fripack
+        # The macOS support lives in the fork; see THIRD_PARTY.md.
+        run: |
+          git clone --depth 1 https://github.com/muyunya/fripack.git fripack-src
+          cd fripack-src
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Stage
+        run: |
+          cp fripack-src/target/${{ matrix.target }}/release/fripack ${{ matrix.asset }}
+          codesign --force --sign - ${{ matrix.asset }}
+          ./${{ matrix.asset }} --version || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  # ── the injectable payload, built from the fripack-inject fork (GPL-3.0) ─────
+  #
+  # This is the slow job (~30-60 min per architecture): it builds Frida. It is
+  # also the whole point of this repository, since upstream publishes nothing for
+  # macOS. scripts/build-payload.sh documents the three requirements that used to
+  # make this fail (Go >= 1.26, MACOS_CERTID, the devkit hand-off).
+  payload:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'   # frida needs >= 1.26
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'     # one of the patches is a JS transformer
+
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.1
+
+      - name: Build payload (${{ matrix.arch }})
+        run: ./scripts/build-payload.sh ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payload-${{ matrix.arch }}
+          path: out/*.dylib
+
+  # ── publish ──────────────────────────────────────────────────────────────────
+  release:
+    needs: [cli, payload]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Name assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          tag="${GITHUB_REF_NAME}"
+          cp artifacts/fripack-macos-* release/
+          for f in artifacts/libfripack-inject-macos-*.dylib; do
+            [ -e "$f" ] || continue
+            arch="$(basename "$f" | sed 's/^libfripack-inject-//; s/\.dylib$//')"
+            cp "$f" "release/fripack-inject-${tag}-${arch}.dylib"
+          done
+          ls -la release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          body: |
+            macOS build of fripack and the injectable payload it needs.
+
+            Use the CLI with `payloadUrl` pointing at the payload asset from this
+            release - see README.md.
+
+            The payload bundles third-party code under other licenses; read
+            THIRD_PARTY.md before redistributing it.

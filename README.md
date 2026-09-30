@@ -1,0 +1,117 @@
+# fripack-macos
+
+Builds and publishes [fripack](https://github.com/std-microblock/fripack) — a tool
+that packages a Frida script into a distributable binary — **for macOS**, together
+with the injectable payload it needs.
+
+Upstream has no macOS payload, so `fripack`'s `macos-*` targets cannot download
+one. This repository fills that gap: it builds the CLI and the payload, publishes
+both as release assets, and documents what actually works on macOS.
+
+> **Status**: the payload is a `.dylib` you inject into a *non-hardened* target
+> process. Read [What works on macOS](#what-works-on-macos) before filing a bug —
+> most "it does nothing" reports are the hardened-runtime restriction below.
+
+## Quick start
+
+**1. Get the CLI**
+
+```sh
+# Apple Silicon
+curl -L -o fripack https://github.com/muyunya/fripack-macos/releases/latest/download/fripack-macos-arm64
+chmod +x fripack && sudo mv fripack /usr/local/bin/
+
+# Intel
+curl -L -o fripack https://github.com/muyunya/fripack-macos/releases/latest/download/fripack-macos-x86_64
+chmod +x fripack && sudo mv fripack /usr/local/bin/
+```
+
+**2. Point a target at the published payload**
+
+`fripack.json` (replace `<tag>` with the release tag you are using):
+
+```json
+{
+  "macos": {
+    "type": "shared",
+    "platform": "macos-arm64",
+    "entry": "./main.js",
+    "payloadUrl": "https://github.com/muyunya/fripack-macos/releases/download/<tag>/fripack-inject-<tag>-{platform}.{ext}"
+  }
+}
+```
+
+**3. Build**
+
+```sh
+fripack build macos
+# -> fripack/macos-macos-arm64.dylib
+```
+
+The payload is downloaded, your script is embedded into it, and the result is
+**re-signed ad-hoc** — patching invalidates the signature and macOS refuses to
+load a Mach-O with a broken one.
+
+**4. Load it into a process**
+
+```sh
+DYLD_INSERT_LIBRARIES=$PWD/fripack/macos-macos-arm64.dylib /path/to/target
+```
+
+## What works on macOS
+
+| Situation | Result |
+|---|---|
+Unsigned / ad-hoc signed / non-hardened target | ✅ injection works |
+Hardened runtime target (most shipped apps) | ❌ dyld **silently ignores** `DYLD_INSERT_LIBRARIES`; adding `disable-library-validation` does not help either |
+Object files that are already signed by someone else | require re-signing after any modification |
+
+Getting into a hardened-runtime application means modifying and re-signing **that
+application**, which is out of scope here. Apple Silicon additionally requires a
+valid (at least ad-hoc) signature on the dylib itself; the build step handles it.
+
+## Rebuilding the payload yourself
+
+You do not need to — the releases carry it. But the payload is GPL-3.0 and the
+build is reproducible:
+
+```sh
+./scripts/build-payload.sh          # ~30-60 min, several GB
+./scripts/verify-payload.sh out/libfripack-inject.dylib
+```
+
+`build-payload.sh` documents every non-obvious requirement (Go >= 1.26,
+`MACOS_CERTID=-`, the Frida configure flags, where the devkit has to land). Those
+three are the reason the upstream payload project currently publishes nothing for
+macOS.
+
+## How the payload works
+
+The payload exposes two things the CLI patches in place:
+
+* `g_embedded_config` — a small struct the CLI locates by magic bytes;
+* a reserved, file-backed section `__DATA,__fripack` the script is written into.
+
+Because both live in the same segment, the CLI only has to compute a
+virtual-address delta between them. No Mach-O structure is rewritten, which keeps
+the tool simple and makes failures loud instead of producing corrupt binaries.
+
+The one non-obvious requirement on the payload side: the reserved buffer **must
+have an explicit initialiser**. Without it the linker folds the buffer into
+zerofill, it occupies no space in the file, and there is nowhere to write.
+
+## Licensing
+
+* Code in **this** repository: MIT (`LICENSE`).
+* Released binaries bundle third-party components under their own licenses —
+  **read [`THIRD_PARTY.md`](THIRD_PARTY.md)**, especially if you plan to
+  redistribute the payload (GPL-3.0, and LGPL-2.1 for Frida).
+
+## Layout
+
+```
+scripts/build-payload.sh    build the macOS payload (Frida + fripack-inject)
+scripts/verify-payload.sh   end-to-end check: patch, sign, inject, assert
+examples/fripack.json       a ready-to-copy macOS target
+.github/workflows/          builds the CLI and the payload, publishes releases
+```
