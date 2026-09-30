@@ -4,3 +4,4 @@
 *.dylib
 /.work-chromatic/
 /out-chromatic/
+app/build/
