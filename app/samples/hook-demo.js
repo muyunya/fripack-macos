@@ -7,11 +7,10 @@
  * instruction; here the program should reach "done" with demo_guard(0) = -1 and
  * demo_guard(1) = 2.
  *
- * onLeave is deliberately absent. The engine calls it from the same trampoline that
- * calls onEnter, before the original function has run, so the "return value" it hands
- * over is the first argument - demo_work(3) reports 3 where 10 came back. Printing a
- * wrong number in a demo teaches the wrong thing, so the hook reports only what it
- * can report correctly: onEnter.
+ * onLeave used to be absent from this script: the engine called it before the function
+ * had run, so the "return value" it handed over was the first argument. It now runs
+ * after the function returns, and this script checks the number it reports instead of
+ * taking it on trust.
  */
 
 const work = Module.findExportByName(null, "demo_work");
@@ -23,6 +22,9 @@ console.log("[script] demo_guard is at " + guard);
 Interceptor.attach(work, {
   onEnter(args) {
     console.log("[script] demo_work called with " + args[0]);
+  },
+  onLeave(retval) {
+    console.log("[script] <<< demo_work returned " + retval);
   }
 });
 
