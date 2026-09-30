@@ -86,9 +86,47 @@ jobs:
           name: payload-${{ matrix.arch }}
           path: out/*.dylib
 
+  # ── the alternative payload: chromatic's injectee ────────────────────────────
+  #
+  # Minutes instead of tens of minutes, and it is the engine upstream fripack is
+  # migrating towards. NOTE: upstream chromatic declares no license - see
+  # THIRD_PARTY.md before using or redistributing this asset.
+  payload-chromatic:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: 3.1.1
+
+      - name: Build chromatic payload (${{ matrix.arch }})
+        run: ./scripts/build-chromatic-payload.sh ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payload-chromatic-${{ matrix.arch }}
+          path: out-chromatic/*.dylib
+
   # ── publish ──────────────────────────────────────────────────────────────────
   release:
-    needs: [cli, payload]
+    needs: [cli, payload, payload-chromatic]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -107,6 +145,11 @@ jobs:
             [ -e "$f" ] || continue
             arch="$(basename "$f" | sed 's/^libfripack-inject-//; s/\.dylib$//')"
             cp "$f" "release/fripack-inject-${tag}-${arch}.dylib"
+          done
+          for f in artifacts/libchromatic-injectee-macos-*.dylib; do
+            [ -e "$f" ] || continue
+            arch="$(basename "$f" | sed 's/^libchromatic-injectee-//; s/\.dylib$//')"
+            cp "$f" "release/chromatic-injectee-${tag}-${arch}.dylib"
           done
           ls -la release
 

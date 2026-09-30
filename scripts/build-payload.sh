@@ -114,7 +114,9 @@ cd fripack-inject/fripack-inject
 xmake f -p macosx -a "$XMAKE_ARCH" -y
 xmake -y
 
-DYLIB="$(find build -name 'libfripack-inject.dylib' | head -1)"
+# Exclude the .dSYM bundle: it contains a file with the same name, and copying
+# that instead of the dylib would produce a "payload" that is a debug object.
+DYLIB="$(find build -name 'libfripack-inject.dylib' -not -path '*.dSYM/*' | head -1)"
 [ -n "$DYLIB" ] || { echo "no dylib produced" >&2; exit 1; }
 cp "$DYLIB" "$OUT/libfripack-inject-$HOST.dylib"
 

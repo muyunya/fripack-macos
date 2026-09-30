@@ -2,3 +2,5 @@
 /out/
 /fripack/
 *.dylib
+/.work-chromatic/
+/out-chromatic/

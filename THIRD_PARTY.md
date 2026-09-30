@@ -10,6 +10,7 @@ other licenses**, listed here. Read this before redistributing those binaries.
 |---|---|---|
 | `fripack-macos-<arch>` | [`muyunya/fripack`](https://github.com/muyunya/fripack) (a fork of `std-microblock/fripack`) | MIT |
 | `fripack-inject-<tag>-macos-<arch>.dylib` | [`muyunya/fripack-inject`](https://github.com/muyunya/fripack-inject) (a fork of `FriRebuild/fripack-inject`) **statically linking Frida** | GPL-3.0 **and** LGPL-2.1-or-later |
+| `chromatic-injectee-<tag>-macos-<arch>.dylib` | [`muyunya/chromatic`](https://github.com/muyunya/chromatic) (a fork of `std-microblock/chromatic`) | **None declared upstream** — see below |
 
 ## fripack — MIT
 
@@ -57,17 +58,43 @@ Frida. To satisfy that, this repository publishes:
 
 Frida itself is not modified in any way that changes its license.
 
-## Not included: chromatic
+## chromatic — upstream declares **no license**
 
-<https://github.com/std-microblock/chromatic> has **no license file and no
-license declaration**, so it is "all rights reserved" by default. Nothing built
-from it is published here.
+Upstream: <https://github.com/std-microblock/chromatic> (no `LICENSE` file, no
+license field — GitHub reports `NONE`).
 
-There is a second macOS payload path based on chromatic's injectee, and it works
-(see the notes in `docs/`), but it can only be built locally for personal use
-until upstream adds a license. If you want that path to be distributable, the
-cleanest fix is to ask upstream for a `LICENSE` — it is a one-line change on
-their side.
+This repository offers a second macOS payload built from chromatic's injectee,
+and publishes it as `chromatic-injectee-<tag>-macos-<arch>.dylib`. **Please read
+this section before using or redistributing that asset.**
+
+### What we are doing, plainly
+
+* The code is taken from [`muyunya/chromatic`](https://github.com/muyunya/chromatic),
+  a **fork** of the upstream project. GitHub's terms permit forking public
+  repositories, and the fork relationship keeps the origin visible.
+* **We claim no rights over chromatic.** It remains the work of its authors
+  (std-microblock and contributors). Nothing in this repository's MIT license
+  applies to it, and no authorship is claimed anywhere.
+* The payload is built from source in CI, so the corresponding source is public
+  and matches the published binary. The two changes the payload needs (a
+  reserved `__DATA,__fripack` section, and a teardown fix that stops the host
+  from aborting on exit) are visible as commits in that fork.
+* **If you are the author and you object to this, open an issue and the asset
+  and the build job will be removed.** Same if you would rather it stay but
+  under specific terms — a `LICENSE` file upstream is a one-line change and
+  everything here becomes unambiguous.
+
+### Why this is still not the same as being licensed
+
+Attribution and a license are different things. Without a license, the default
+is "all rights reserved", so downstream users of this asset do not receive a
+grant from the chromatic authors — they receive the code under the terms above
+and nothing more. If that matters to you, use the Frida-based payload instead:
+it is GPL-3.0, which is an explicit grant.
+
+Upstream has been inactive since 2026-03-31, which is why asking directly may not
+be practical. That is the reason this is handled as a provenance declaration
+rather than as a request for permission.
 
 ## GitHub Actions runners
 
