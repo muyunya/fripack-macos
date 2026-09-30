@@ -23,8 +23,10 @@ set -euo pipefail
 
 ARCH="${1:-$(uname -m)}"
 case "$ARCH" in
+  # xmake maps its arch name straight onto clang's -arch, and clang only accepts
+  # x86_64: passing "x64" fails with "invalid arch name '-arch x64'".
   arm64)  HOST=macos-arm64;  XMAKE_ARCH=arm64 ;;
-  x86_64) HOST=macos-x86_64; XMAKE_ARCH=x64 ;;
+  x86_64) HOST=macos-x86_64; XMAKE_ARCH=x86_64 ;;
   *) echo "usage: $0 [arm64|x86_64]" >&2; exit 2 ;;
 esac
 
